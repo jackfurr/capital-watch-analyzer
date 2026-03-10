@@ -14,6 +14,7 @@ from analyzer.api_client import ScraperClient, ScraperAPIError
 from analyzer.config import settings
 from analyzer.heuristics import HeuristicAnalyzer
 from analyzer.report_generator import ReportGenerator
+from analyzer.scheduler import WeeklyScheduler
 
 app = typer.Typer(
     name="capital-watch-analyzer",
@@ -231,6 +232,37 @@ def generate_report(
         except ScraperAPIError as e:
             console.print(f"[red]API error: {e}[/red]")
             raise typer.Exit(1)
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+            raise typer.Exit(1)
+
+    asyncio.run(run())
+
+
+@app.command()
+def schedule(
+    dry_run: bool = typer.Option(False, "--dry-run", help="Calculate week but don't generate"),
+) -> None:
+    """Run scheduled weekly report generation."""
+    setup_logging()
+
+    async def run() -> None:
+        scheduler = WeeklyScheduler()
+        week_start, week_end = scheduler.get_report_week()
+
+        console.print(f"Scheduled report week: {week_start} to {week_end}")
+
+        if dry_run:
+            console.print("[yellow]Dry run - not generating report[/yellow]")
+            return
+
+        try:
+            with console.status("Generating scheduled report..."):
+                output_path = await scheduler.generate_weekly_report(week_start, week_end)
+            console.print(f"[green]Report generated: {output_path}[/green]")
+        except ValueError as e:
+            console.print(f"[yellow]{e}[/yellow]")
+            raise typer.Exit(0)
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")
             raise typer.Exit(1)
