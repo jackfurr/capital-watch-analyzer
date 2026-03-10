@@ -13,6 +13,7 @@ from rich.table import Table
 from analyzer.api_client import ScraperClient, ScraperAPIError
 from analyzer.config import settings
 from analyzer.heuristics import HeuristicAnalyzer
+from analyzer.report_generator import ReportGenerator
 
 app = typer.Typer(
     name="capital-watch-analyzer",
@@ -184,14 +185,57 @@ def generate_report(
     week_end = week_start + timedelta(days=6)
 
     console.print(f"Generating report for week of {week_start} to {week_end}...")
-    console.print("[yellow]PDF generation not yet implemented[/yellow]")
 
-    # TODO: Implement PDF generation
-    # 1. Fetch data for the week
-    # 2. Run analysis
-    # 3. Generate HTML template
-    # 4. Convert to PDF with WeasyPrint
-    # 5. Save to output_dir or settings.reports_dir
+    async def run() -> None:
+        client = ScraperClient()
+        analyzer = HeuristicAnalyzer()
+        generator = ReportGenerator(output_dir)
+
+        try:
+            # Fetch data
+            with console.status("Fetching trades..."):
+                trades = await client.get_all_trades_for_period(week_start, week_end)
+
+            if not trades:
+                console.print("[yellow]No trades found for this period[/yellow]")
+                return
+
+            console.print(f"Found {len(trades)} trades")
+
+            # Fetch politicians
+            with console.status("Fetching politicians..."):
+                pol_result = await client.get_politicians(page_size=1000)
+                politicians = pol_result.get("items", [])
+
+            # Run analysis
+            with console.status("Analyzing data..."):
+                pol_metrics = analyzer.analyze_politicians(trades, politicians)
+                asset_metrics = analyzer.analyze_assets(trades)
+                sector_metrics = analyzer.analyze_sectors(trades)
+                alerts = analyzer.detect_unusual_patterns(trades, politicians)
+
+            # Generate PDF
+            with console.status("Generating PDF..."):
+                output_path = generator.generate_from_analysis(
+                    week_start=week_start,
+                    week_end=week_end,
+                    trades=trades,
+                    politician_metrics=pol_metrics,
+                    asset_metrics=asset_metrics,
+                    sector_metrics=sector_metrics,
+                    alerts=alerts,
+                )
+
+            console.print(f"[green]Report generated: {output_path}[/green]")
+
+        except ScraperAPIError as e:
+            console.print(f"[red]API error: {e}[/red]")
+            raise typer.Exit(1)
+        except Exception as e:
+            console.print(f"[red]Error: {e}[/red]")
+            raise typer.Exit(1)
+
+    asyncio.run(run())
 
 
 @app.command()
