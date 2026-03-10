@@ -1,7 +1,17 @@
 """Configuration settings for the analyzer."""
 
+from pathlib import Path
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _load_finnhub_key() -> str | None:
+    """Load Finnhub API key from file if it exists."""
+    key_file = Path.home() / ".config" / "finnhub" / "api_key"
+    if key_file.exists():
+        return key_file.read_text().strip()
+    return None
 
 
 class Settings(BaseSettings):
@@ -40,7 +50,11 @@ class Settings(BaseSettings):
     brevo_api_key: str | None = Field(default=None, alias="BREVO_API_KEY")
 
     # Finnhub Configuration (optional - for ticker lookup)
-    finnhub_api_key: str | None = Field(default=None, alias="FINNHUB_API_KEY")
+    # Reads from ~/.config/finnhub/api_key if FINNHUB_API_KEY env var not set
+    finnhub_api_key: str | None = Field(
+        default_factory=_load_finnhub_key,
+        alias="FINNHUB_API_KEY",
+    )
 
     @property
     def api_headers(self) -> dict[str, str]:
