@@ -9,6 +9,7 @@ import structlog
 
 from analyzer.api_client import ScraperClient
 from analyzer.config import settings
+from analyzer.distributor import Distributor
 from analyzer.heuristics import HeuristicAnalyzer
 from analyzer.report_generator import ReportGenerator
 
@@ -23,6 +24,7 @@ class WeeklyScheduler:
         self.client = ScraperClient()
         self.analyzer = HeuristicAnalyzer()
         self.generator = ReportGenerator()
+        self.distributor = Distributor()
         self.logger = structlog.get_logger()
 
     def get_report_week(self, target_date: date | None = None) -> tuple[date, date]:
@@ -113,6 +115,15 @@ class WeeklyScheduler:
         )
 
         self.logger.info("Weekly report generated", output_path=str(output_path))
+
+        # Distribute the report
+        summary = f"{len(pol_metrics)} politicians, {len(asset_metrics)} assets, {len(alerts)} alerts"
+        await self.distributor.distribute_report(
+            report_path=output_path,
+            week_start=week_start.strftime("%Y-%m-%d"),
+            week_end=week_end.strftime("%Y-%m-%d"),
+            summary=summary,
+        )
 
         return output_path
 

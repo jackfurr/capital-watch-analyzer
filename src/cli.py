@@ -12,9 +12,11 @@ from rich.table import Table
 
 from analyzer.api_client import ScraperClient, ScraperAPIError
 from analyzer.config import settings
+from analyzer.distributor import Distributor, EmailDistributor
 from analyzer.heuristics import HeuristicAnalyzer
 from analyzer.report_generator import ReportGenerator
 from analyzer.scheduler import WeeklyScheduler
+from analyzer.ticker_normalizer import TickerNormalizer
 
 app = typer.Typer(
     name="capital-watch-analyzer",
@@ -265,6 +267,69 @@ def schedule(
             raise typer.Exit(0)
         except Exception as e:
             console.print(f"[red]Error: {e}[/red]")
+            raise typer.Exit(1)
+
+    asyncio.run(run())
+
+
+@app.command()
+def normalize(
+    name: str = typer.Argument(..., help="Asset name to normalize"),
+) -> None:
+    """Normalize an asset name to ticker symbol."""
+    setup_logging()
+
+    async def run() -> None:
+        normalizer = TickerNormalizer(finnhub_api_key=settings.finnhub_api_key)
+
+        console.print(f"Normalizing: [bold]{name}[/bold]")
+
+        with console.status("Looking up ticker..."):
+            result = await normalizer.normalize(name)
+
+        if result.ticker:
+            console.print(f"[green]Ticker: {result.ticker}[/green]")
+            console.print(f"  Name: {result.name}")
+            console.print(f"  Sector: {result.sector or 'Unknown'}")
+            console.print(f"  Industry: {result.industry or 'Unknown'}")
+            console.print(f"  Confidence: {result.confidence:.1f}%")
+            console.print(f"  Source: {result.source}")
+        else:
+            console.print("[yellow]No ticker found[/yellow]")
+
+    asyncio.run(run())
+
+
+@app.command()
+def send_test_email(
+    to: str = typer.Option(..., "--to", help="Recipient email address"),
+) -> None:
+    """Send a test email to verify distribution."""
+    setup_logging()
+
+    async def run() -> None:
+        distributor = EmailDistributor()
+
+        console.print(f"Sending test email to {to}...")
+
+        result = await distributor.send_via_brevo(
+            to_email=to,
+            subject="Capitol Watch - Test Email",
+            html_content="""
+            <html>
+            <body>
+                <h2>Capitol Watch Test</h2>
+                <p>This is a test email from the Capitol Watch Analyzer.</p>
+                <p>If you're receiving this, your email distribution is configured correctly!</p>
+            </body>
+            </html>
+            """,
+        )
+
+        if result.success:
+            console.print(f"[green]{result.message}[/green]")
+        else:
+            console.print(f"[red]Failed: {result.error}[/red]")
             raise typer.Exit(1)
 
     asyncio.run(run())

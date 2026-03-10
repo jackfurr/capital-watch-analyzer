@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     # Discord Configuration (optional)
     discord_webhook_url: str | None = Field(default=None, alias="DISCORD_WEBHOOK_URL")
 
+    # Brevo Configuration (optional - for email)
+    brevo_api_key: str | None = Field(default=None, alias="BREVO_API_KEY")
+
+    # Finnhub Configuration (optional - for ticker lookup)
+    finnhub_api_key: str | None = Field(default=None, alias="FINNHUB_API_KEY")
+
     @property
     def api_headers(self) -> dict[str, str]:
         """Return headers for API requests including auth."""
